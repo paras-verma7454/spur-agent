@@ -17,7 +17,7 @@ export function SuggestedQuestions({ onQuestionClick }: SuggestedQuestionsProps)
           <button
             key={question}
             onClick={() => onQuestionClick(question)}
-            className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors"
+            className="text-xs px-3 py-1.5 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-100 transition-colors cursor-pointer"
           >
             {question}
           </button>

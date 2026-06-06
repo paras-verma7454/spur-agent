@@ -15,7 +15,7 @@ const ChatHeader = ({ onNewChat }: { onNewChat: () => void }) => (
       </div>
       <button
         onClick={onNewChat}
-        className="text-xs text-blue-100 hover:text-white underline transition-colors"
+        className="text-xs text-blue-100 hover:text-white underline transition-colors cursor-pointer"
       >
         New chat
       </button>

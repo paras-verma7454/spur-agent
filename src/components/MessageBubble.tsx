@@ -1,12 +1,20 @@
+import { memo } from 'react';
+import type { Sender } from '@/lib/types';
+
 interface MessageBubbleProps {
-  sender: 'user' | 'ai';
+  sender: Sender;
   text: string;
   timestamp: Date;
 }
 
-export function MessageBubble({ sender, text, timestamp }: MessageBubbleProps) {
+const TIME_FORMAT_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: '2-digit',
+  minute: '2-digit',
+};
+
+export const MessageBubble = memo(function MessageBubble({ sender, text, timestamp }: MessageBubbleProps) {
   const isUser = sender === 'user';
-  
+
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       <div
@@ -18,9 +26,9 @@ export function MessageBubble({ sender, text, timestamp }: MessageBubbleProps) {
       >
         <p className="text-sm leading-relaxed whitespace-pre-wrap">{text}</p>
         <p className={`text-xs mt-1 ${isUser ? 'text-blue-100' : 'text-gray-500'}`}>
-          {new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          {new Date(timestamp).toLocaleTimeString([], TIME_FORMAT_OPTIONS)}
         </p>
       </div>
     </div>
   );
-}
+});

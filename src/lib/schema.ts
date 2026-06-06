@@ -12,7 +12,7 @@ export const messages = pgTable(
     conversationId: text('conversation_id')
       .notNull()
       .references(() => conversations.id, { onDelete: 'cascade' }),
-    sender: text('sender').notNull(),
+    sender: text('sender').notNull(), // Allowed values: "user" | "ai" (enforced at API layer)
     text: text('text').notNull(),
     timestamp: timestamp('timestamp').defaultNow().notNull(),
   },

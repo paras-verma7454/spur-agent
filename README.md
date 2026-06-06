@@ -9,6 +9,7 @@ A mini AI support agent for a live chat widget, built as part of the Spur Softwa
 - **Database:** PostgreSQL (NeonDB/Supabase)
 - **ORM:** Drizzle ORM
 - **LLM:** OpenAI GPT-4o-mini or Groq Llama 3.3 70B
+- **Validation:** Zod
 - **Styling:** Tailwind CSS
 
 ## Quick Start
@@ -74,51 +75,90 @@ A mini AI support agent for a live chat widget, built as part of the Spur Softwa
 
 ### Overview
 
-This is a **Next.js monolith** using App Router API routes as the backend. The frontend and backend live in the same project, sharing types and utilities.
+This is a **Next.js monolith** using App Router API routes as the backend. The frontend and backend live in the same project. The architecture follows a **ports & adapters** pattern with clear seams between business logic, infrastructure, and presentation.
 
 ### File Structure
 
 ```
 src/
 ├── app/
-│   ├── page.tsx              # Main chat page
-│   ├── layout.tsx            # Root layout
-│   ├── globals.css           # Tailwind styles
-│   └── api/chat/
-│       ├── route.ts          # POST /api/chat
-│       └── history/route.ts  # GET /api/chat/history
+│   ├── page.tsx                  # Main chat page
+│   ├── layout.tsx                # Root layout
+│   ├── globals.css               # Tailwind styles
+│   └── chat/
+│       ├── message/route.ts        # POST /chat/message (thin HTTP adapter)
+│       └── history/route.ts        # GET /chat/history
 ├── lib/
-│   ├── db.ts                 # Drizzle database client
-│   ├── schema.ts             # Drizzle schema (tables)
-│   ├── llm.ts                # OpenAI/Groq integration
-│   └── prompts.ts            # System prompt + FAQ
+│   ├── types.ts                  # Shared types (Sender, Message, HistoryMessage)
+│   ├── db.ts                     # Drizzle database client + factory
+│   ├── schema.ts                 # Drizzle schema (tables)
+│   ├── repo.ts                   # ConversationRepository interface + Drizzle adapter
+│   ├── repo-in-memory.ts         # In-memory adapter (for tests)
+│   ├── llm-provider.ts           # LlmProvider interface + OpenAI/Groq/Fake adapters
+│   ├── rate-limiter.ts           # RateLimiter interface + InMemory/NoOp adapters
+│   ├── pipeline.ts               # conversationPipeline (orchestrates all deps)
+│   ├── validations.ts            # Zod request schemas
+│   └── prompts.ts                # System prompt + FAQ
+├── hooks/
+│   └── useChat.ts                # Frontend state + API + localStorage
 ├── components/
-│   ├── ChatWidget.tsx        # Main chat container
-│   ├── MessageList.tsx       # Scrollable messages
-│   ├── MessageBubble.tsx     # Individual message
-│   ├── ChatInput.tsx         # Input + send button
-│   ├── TypingIndicator.tsx   # Loading state
-│   └── SuggestedQuestions.tsx # Quick action buttons
-└── drizzle/                  # Drizzle migrations (generated)
+│   ├── ChatWidget.tsx            # Main chat container (pure renderer)
+│   ├── MessageList.tsx           # Scrollable messages
+│   ├── MessageBubble.tsx         # Individual message
+│   ├── ChatInput.tsx             # Input + send button
+│   ├── TypingIndicator.tsx       # Loading state
+│   └── SuggestedQuestions.tsx    # Quick action buttons
+└── drizzle/                      # Drizzle migrations (generated)
 ```
+
+### Dependency Graph
+
+```
+types.ts ←── shared across everything
+    │
+    ├── repo.ts (ConversationRepository interface)
+    ├── llm-provider.ts (LlmProvider interface)
+    ├── rate-limiter.ts (RateLimiter interface)
+    │
+    └── pipeline.ts (orchestrates all three)
+           │
+           └── route.ts (thin HTTP adapter)
+
+useChat.ts (frontend state + API)
+    │
+    └── ChatWidget.tsx (pure renderer)
+```
+
+### Seams & Adapters
+
+| Interface | Production Adapter | Test Adapter | Purpose |
+|-----------|-------------------|--------------|---------|
+| `ConversationRepository` | Drizzle + PostgreSQL | In-memory Map | Data persistence |
+| `LlmProvider` | OpenAI / Groq SDK | Fake (canned responses) | LLM generation |
+| `RateLimiter` | In-memory sliding window | NoOp (always allow) | Request throttling |
 
 ### Data Flow
 
-1. User types message → Frontend sends POST to `/api/chat`
-2. Backend validates input, creates/retrieves conversation
-3. Saves user message to database
-4. Fetches last 20 messages for context
-5. Calls LLM (OpenAI or Groq) with system prompt + conversation history
-6. Saves AI response to database
-7. Returns response to frontend
+1. User types message → `useChat` hook sends POST to `/chat/message`
+2. HTTP adapter validates request (Zod + body size check)
+3. `conversationPipeline` orchestrates:
+   - Rate limiter checks IP
+   - Repository finds/creates conversation
+   - Repository persists user message
+   - Repository fetches last 20 messages for context
+   - LLM provider generates reply
+   - Repository persists AI message
+4. Response returned to frontend
+5. `useChat` updates state, stores sessionId in localStorage
 
 ### Key Design Decisions
 
-- **Session persistence:** Uses localStorage to store sessionId, enabling conversation history across page reloads
-- **Context window:** Limits to last 20 messages to control LLM costs
-- **FAQ in prompt:** Store FAQ knowledge directly in the system prompt for simplicity
-- **Error handling:** Graceful degradation with user-friendly error messages
-- **Multi-LLM support:** Switch between OpenAI and Groq via environment variable
+- **Ports & adapters:** All infrastructure (DB, LLM, rate limiting) behind interfaces with swappable adapters
+- **Function-based pipeline:** `conversationPipeline` is a pure function, not a class — simple, composable, testable
+- **Shared types:** `Sender`, `Message`, `HistoryMessage` defined once in `types.ts`, imported everywhere
+- **Session persistence:** localStorage stores sessionId for conversation history across page reloads
+- **Domain-restricted AI:** Agent only answers store-related questions, redirects off-topic queries
+- **Prompt injection defense:** User input wrapped in `<<<USER_INPUT>>>` markers
 
 ## LLM Integration
 
@@ -141,11 +181,42 @@ Set `LLM_PROVIDER` in your environment to switch between providers:
 - Conversation history included for contextual replies
 - Max 500 tokens per response for cost control
 - Temperature 0.7 for balanced responses
+- User input wrapped in delimiters to prevent prompt injection
+- Agent refuses off-topic questions with a polite redirect
 
 ### Guardrails
 - 30-second timeout on API calls
-- Graceful error handling for rate limits, invalid keys, network issues
+- Graceful error handling for rate limits (429), invalid keys (401), network issues
 - User-friendly fallback messages
+- Domain restriction: agent only answers store-related questions
+
+## Security & Robustness
+
+### Input Validation
+- **Zod schemas** for all request bodies and query parameters
+- **Empty messages** rejected with 400
+- **Long messages** silently truncated to 2000 chars (server-side via Zod transform)
+- **Invalid JSON** caught and returned as 400
+- **Invalid UUID format** for sessionId rejected early
+
+### Rate Limiting
+- In-memory sliding window: 20 requests per minute per IP
+- Returns 429 with `Retry-After` header when exceeded
+- Pluggable interface — swap to Redis for multi-instance deployments
+
+### Body Size Limit
+- Requests over 10KB rejected with 413 before JSON parsing
+
+### Error Handling
+- Backend never crashes on bad input — all errors caught and returned as clean JSON
+- LLM failures (timeout, rate limit, invalid key) return friendly messages, not stack traces
+- Frontend displays contextual error messages based on HTTP status codes
+- Graceful degradation: `conversationPipeline` returns structured errors, not exceptions
+
+### Prompt Injection Defense
+- User input wrapped in `<<<USER_INPUT>>>` / `<<<END_USER_INPUT>>>` markers
+- System prompt instructs AI to never treat user input as instructions
+- Agent refuses to answer non-store questions
 
 ## Environment Variables
 
@@ -175,14 +246,15 @@ Set `LLM_PROVIDER` in your environment to switch between providers:
 ### Trade-offs Made
 - **FAQ in prompt:** Simpler than vector search, sufficient for this scope
 - **No auth:** Assignment says optional, keeping it simple
-- **No Redis:** Not needed for this scale
+- **In-memory rate limiter:** Works for single-instance; Redis needed for production scale
+- **Drizzle `any` type for DB:** Simplifies repository typing; proper generic would be stricter
 
 ### If I Had More Time
 - [ ] Add conversation history sidebar
 - [ ] Implement streaming responses for better UX
 - [ ] Add dark mode support
-- [ ] Implement rate limiting on API
-- [ ] Add unit and integration tests
+- [ ] Switch rate limiter to Redis for multi-instance
+- [ ] Add unit and integration tests (now possible with in-memory adapters)
 - [ ] Deploy to Vercel/Render
 - [ ] Add WebSocket for real-time updates
 - [ ] Implement conversation search

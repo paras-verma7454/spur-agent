@@ -16,7 +16,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>{children}</body>
+      <head>
+        <link rel="preconnect" href="https://api.openai.com" />
+        <link rel="preconnect" href="https://api.groq.com" />
+      </head>
+      <body className={inter.className} suppressHydrationWarning>{children}</body>
     </html>
   );
 }

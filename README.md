@@ -1,36 +1,167 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Spur AI Chat Agent
 
-## Getting Started
+A mini AI support agent for a live chat widget, built as part of the Spur Software Engineer Hiring Assignment.
 
-First, run the development server:
+## Tech Stack
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Framework:** Next.js 16 (App Router)
+- **Language:** TypeScript
+- **Database:** PostgreSQL (NeonDB/Supabase)
+- **ORM:** Prisma 7
+- **LLM:** OpenAI GPT-4o-mini
+- **Styling:** Tailwind CSS
+
+## Quick Start
+
+### Prerequisites
+
+- Node.js 20.19+
+- A PostgreSQL database (NeonDB, Supabase, or local)
+- OpenAI API key
+
+### Setup
+
+1. **Clone the repository**
+   ```bash
+   git clone <your-repo-url>
+   cd spur-chat-agent
+   ```
+
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
+
+3. **Configure environment variables**
+   
+   Copy `.env.example` to `.env.local` and fill in your values:
+   ```env
+   DATABASE_URL="postgres://user:password@host:5432/dbname"
+   OPENAI_API_KEY="sk-your-api-key"
+   ```
+
+4. **Set up database**
+   ```bash
+   npx prisma generate
+   npx prisma db push
+   ```
+
+5. **Test database connection**
+   ```bash
+   npm run db:test
+   ```
+
+6. **Run development server**
+   ```bash
+   npm run dev
+   ```
+
+7. **Open in browser**
+   ```
+   http://localhost:3000
+   ```
+
+## Architecture
+
+### Overview
+
+This is a **Next.js monolith** using App Router API routes as the backend. The frontend and backend live in the same project, sharing types and utilities.
+
+### File Structure
+
+```
+src/
+├── app/
+│   ├── page.tsx              # Main chat page
+│   ├── layout.tsx            # Root layout
+│   ├── globals.css           # Tailwind styles
+│   └── api/chat/
+│       ├── route.ts          # POST /api/chat
+│       └── history/route.ts  # GET /api/chat/history
+├── lib/
+│   ├── prisma.ts             # Database client (global singleton)
+│   ├── llm.ts                # OpenAI integration
+│   └── prompts.ts            # System prompt + FAQ
+├── components/
+│   ├── ChatWidget.tsx        # Main chat container
+│   ├── MessageList.tsx       # Scrollable messages
+│   ├── MessageBubble.tsx     # Individual message
+│   ├── ChatInput.tsx         # Input + send button
+│   ├── TypingIndicator.tsx   # Loading state
+│   └── SuggestedQuestions.tsx # Quick action buttons
+└── generated/prisma/         # Auto-generated Prisma client
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Data Flow
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. User types message → Frontend sends POST to `/api/chat`
+2. Backend validates input, creates/retrieves conversation
+3. Saves user message to database
+4. Fetches last 20 messages for context
+5. Calls OpenAI with system prompt + conversation history
+6. Saves AI response to database
+7. Returns response to frontend
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### Key Design Decisions
 
-## Learn More
+- **Session persistence:** Uses localStorage to store sessionId, enabling conversation history across page reloads
+- **Context window:** Limits to last 20 messages to control LLM costs
+- **FAQ in prompt:** Store FAQ knowledge directly in the system prompt for simplicity
+- **Error handling:** Graceful degradation with user-friendly error messages
 
-To learn more about Next.js, take a look at the following resources:
+## LLM Integration
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Provider
+OpenAI GPT-4o-mini (cost-effective, reliable)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Prompt Strategy
+- System prompt defines "Spur Store" identity and FAQ knowledge
+- Conversation history included for contextual replies
+- Max 500 tokens per response for cost control
+- Temperature 0.7 for balanced responses
 
-## Deploy on Vercel
+### Guardrails
+- 30-second timeout on API calls
+- Graceful error handling for rate limits, invalid keys, network issues
+- User-friendly fallback messages
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Environment Variables
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | Yes | PostgreSQL connection string (TCP format: `postgres://...`) |
+| `OPENAI_API_KEY` | Yes | OpenAI API key |
+
+## NPM Scripts
+
+| Script | Description |
+|--------|-------------|
+| `npm run dev` | Start development server |
+| `npm run build` | Build for production |
+| `npm run lint` | Run ESLint |
+| `npx prisma generate` | Regenerate Prisma client |
+| `npx prisma db push` | Push schema to database |
+| `npm run db:test` | Test database connection |
+| `npm run db:studio` | Open Prisma Studio |
+
+## Trade-offs & If I Had More Time
+
+### Trade-offs Made
+- **FAQ in prompt:** Simpler than vector search, sufficient for this scope
+- **No auth:** Assignment says optional, keeping it simple
+- **No Redis:** Not needed for this scale
+
+### If I Had More Time
+- [ ] Add conversation history sidebar
+- [ ] Implement streaming responses for better UX
+- [ ] Add dark mode support
+- [ ] Implement rate limiting on API
+- [ ] Add unit and integration tests
+- [ ] Deploy to Vercel/Render
+- [ ] Add WebSocket for real-time updates
+- [ ] Implement conversation search
+- [ ] Add admin dashboard for analytics
+
+## License
+
+MIT

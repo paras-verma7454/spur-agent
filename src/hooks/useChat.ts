@@ -131,5 +131,12 @@ export function useChat() {
     }
   }, []);
 
-  return { messages: deferredMessages, isLoading: isLoading || isPending, showWelcome, sendMessage };
+  const clearChat = useCallback(() => {
+    setMessages([]);
+    sessionIdRef.current = null;
+    hasLoadedHistory.current = false;
+    localStorage.removeItem('chatSessionId');
+  }, []);
+
+  return { messages: deferredMessages, isLoading: isLoading || isPending, showWelcome, sendMessage, clearChat };
 }

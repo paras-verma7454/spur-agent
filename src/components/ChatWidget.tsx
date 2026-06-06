@@ -6,22 +6,30 @@ import { TypingIndicator } from './TypingIndicator';
 import { SuggestedQuestions } from './SuggestedQuestions';
 import { useChat } from '@/hooks/useChat';
 
-const ChatHeader = (
+const ChatHeader = ({ onNewChat }: { onNewChat: () => void }) => (
   <div className="px-4 py-3 bg-blue-600 text-white rounded-t-lg">
-    <div className="flex items-center gap-2">
-      <div className="w-3 h-3 bg-green-400 rounded-full" />
-      <h2 className="font-semibold">Spur Store Support</h2>
+    <div className="flex items-center justify-between">
+      <div className="flex items-center gap-2">
+        <div className="w-3 h-3 bg-green-400 rounded-full" />
+        <h2 className="font-semibold">Spur Store Support</h2>
+      </div>
+      <button
+        onClick={onNewChat}
+        className="text-xs text-blue-100 hover:text-white underline transition-colors"
+      >
+        New chat
+      </button>
     </div>
     <p className="text-xs text-blue-100 mt-0.5">We typically reply instantly</p>
   </div>
 );
 
 export function ChatWidget() {
-  const { messages, isLoading, showWelcome, sendMessage } = useChat();
+  const { messages, isLoading, showWelcome, sendMessage, clearChat } = useChat();
 
   return (
     <div className="flex flex-col h-[600px] w-full max-w-md bg-white rounded-lg shadow-xl border border-gray-200">
-      {ChatHeader}
+      <ChatHeader onNewChat={clearChat} />
 
       <MessageList messages={messages} />
 
